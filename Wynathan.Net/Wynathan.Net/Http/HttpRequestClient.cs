@@ -451,7 +451,7 @@ namespace Wynathan.Net.Http
 
             string location;
             // We expect to get location to redirect to if redirection is presumed by the server.
-            // If no Location header found, then to redirection is intended.
+            // If no Location header found, then no redirection is intended.
             if (!HttpHeadersHelper.TryRetrieveHeaderValue(this.headersPlain, HttpRequestHeader.ContentLocation, out location))
             {
                 this.CleanupSession();
@@ -460,11 +460,11 @@ namespace Wynathan.Net.Http
 
             this.currentRedirectAmount++;
             if (this.currentRedirectAmount >= this.settings.MaximumRedirectAmount)
-                throw new InvalidOperationException("Reach redirect threshold.");
+                throw new InvalidOperationException("Redirection threshold exceeded.");
 
             var newUri = HttpHelper.BuildUriFrom(this.uri.Host, location, this.port);
 
-            // If case of statusCode is either 301 or 302, or just hosts differ, 
+            // In case of statusCode is either 301 or 302, or just hosts differ, 
             // new TCP session is required.
             if (this.uri.Host != newUri.Host)
             {
@@ -502,7 +502,7 @@ namespace Wynathan.Net.Http
             // If the "Connection" header was provided by the server and its value is set "close", 
             // then the socket has already been closed by the server, hence no need to get an 
             // exception in our face - just recreate the connection.
-            if (HttpHeadersHelper.TryRetrieveHeaderValue(this.headersPlain, HttpRequestHeader.Connection, out connection) && connection.EqualsII("close"))
+            if (HttpHeadersHelper.TryRetrieveHeaderValue(this.headersPlain, HttpRequestHeader.Connection, out connection) && connection.Trim().EqualsII("close"))
             {
                 this.CleanupSession();
                 this.shouldContinue = true;
@@ -513,6 +513,9 @@ namespace Wynathan.Net.Http
             if (HttpHeadersHelper.TryRetrieveHeaderValue(this.headersPlain, HttpRequestHeader.KeepAlive, out keepAlive))
             {
                 // Ignore timeout and recreate TCP session.
+                // TODO: reconsider; some basic calculations may be necessary to 
+                // decide whether we can continue to use current session
+                // TODO: check if x.StartsWithII("timeout") is a valid clause
                 var timeoutSetting = keepAlive.Split(',').Select(x => x.Trim())
                     .FirstOrDefault(x => x.StartsWithII("timeout"));
 
@@ -524,7 +527,7 @@ namespace Wynathan.Net.Http
                 }
             }
 
-            // In case we have missed some specific case, just continue using this session.
+            // In case we have missed some specific case, just continue to use current session.
             this.shouldContinue = true;
         }
 
