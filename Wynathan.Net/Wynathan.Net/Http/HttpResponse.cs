@@ -7,29 +7,83 @@ using Wynathan.Net.Http.Helpers;
 
 namespace Wynathan.Net.Http
 {
+    /// <summary>
+    /// Represents an HTTP response model to be used as a result of 
+    /// <see cref="HttpRequestClient"/> interactions.
+    /// </summary>
+    /// <remarks>
+    /// TODO: reconsider; replace with a wrapper around request-response 
+    /// chain.
+    /// </remarks>
     public sealed class HttpResponse
     {
         private string[] plainHttpHeaders;
         private byte[] plainResponseBody;
         private readonly List<HttpResponse> requestChain;
-
-        public Uri RequestedUri;
-        public HttpRequestMethod HttpMethod;
-        public long Bytes;
-        public Uri FinalUri;
-        public X509Certificate ServerCertificate;
-        public HttpStatusCode StatusCode;
-        public TimeSpan Elapsed;
-
+        
         internal HttpResponse()
         {
             this.requestChain = new List<HttpResponse>();
         }
-        
+
+        /// <summary>
+        /// The target <see cref="Uri"/> to which original request 
+        /// has been made.
+        /// </summary>
+        public Uri RequestedUri { get; internal set; }
+
+        /// <summary>
+        /// The HTTP method that has been used to made the original 
+        /// request.
+        /// </summary>
+        public HttpRequestMethod HttpMethod { get; internal set; }
+
+        /// <summary>
+        /// Amount of bytes received in HTTP response body.
+        /// </summary>
+        public long Bytes { get; internal set; }
+
+        /// <summary>
+        /// The <see cref="Uri"/> that returned final status code.
+        /// </summary>
+        public Uri FinalUri { get; internal set; }
+
+        /// <summary>
+        /// The SSL certificate used by the server to establish SSL session.
+        /// </summary>
+        /// <remarks>
+        /// TODO: reconsider; should be a single server cert per 
+        /// request made, not for the resulting response wrapper
+        /// </remarks>
+        public X509Certificate ServerCertificate { get; internal set; }
+
+        /// <summary>
+        /// The HTTP status code received when requested the <see cref="FinalUri"/>.
+        /// </summary>
+        public HttpStatusCode StatusCode { get; internal set; }
+
+        /// <summary>
+        /// Total time spent on receiving data from the server via 
+        /// the underlying socket connection.
+        /// </summary>
+        public TimeSpan Elapsed { get; internal set; }
+
+        /// <summary>
+        /// Final response HTTP headers.
+        /// </summary>
         public Dictionary<string, string> Headers { get; private set; }
 
+        /// <summary>
+        /// Final response HTTP body.
+        /// </summary>
         public string Body { get; private set; }
 
+        /// <summary>
+        /// Returns reassembled HTTP response with headers and body. 
+        /// Disregards Transfer-Encoding if any (header will persist, 
+        /// but body will be decoded).
+        /// </summary>
+        /// <returns></returns>
         public string GetFullResponse()
         {
             // TODO: if "Transfer-Encoding: chunked" - consider vary result on a matter 
@@ -39,6 +93,13 @@ namespace Wynathan.Net.Http
             return mergedHtml;
         }
 
+        /// <summary>
+        /// Returns a copy of requests made to achieve final response.
+        /// </summary>
+        /// <returns></returns>
+        /// <remarks>
+        /// TODO: reconsider in terms of request-response chain wrapper.
+        /// </remarks>
         public IEnumerable<HttpResponse> GetRequestChain()
         {
             return this.requestChain.ToArray();
@@ -60,7 +121,7 @@ namespace Wynathan.Net.Http
             this.plainHttpHeaders = plainHttpHeaders;
             this.plainResponseBody = plainResponseBody;
             this.Headers = HttpHeadersHelper.ParseHeaders(plainHttpHeaders);
-            this.Body = HtmlBodyHelper.GetHtml(this.Headers, plainResponseBody, ref bytes);
+            this.Body = HttpBodyHelper.GetBody(this.Headers, plainResponseBody, ref bytes);
             this.Bytes = bytes;
         }
     }

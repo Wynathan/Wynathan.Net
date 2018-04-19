@@ -44,7 +44,7 @@
   <ItemGroup>
     <Compile Include="Extensions\EnumerableExtensions.cs" />
     <Compile Include="Extensions\StringExtensions.cs" />
-    <Compile Include="Http\Helpers\HtmlBodyHelper.cs" />
+    <Compile Include="Http\Helpers\HttpBodyHelper.cs" />
     <Compile Include="Http\Helpers\HttpHeadersHelper.cs" />
     <Compile Include="Http\Helpers\HttpHelper.cs" />
     <Compile Include="Http\HttpRequest.cs" />

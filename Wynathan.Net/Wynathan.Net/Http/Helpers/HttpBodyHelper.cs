@@ -10,8 +10,18 @@ using Wynathan.Net.Extensions;
 
 namespace Wynathan.Net.Http.Helpers
 {
-    internal static class HtmlBodyHelper
+    internal static class HttpBodyHelper
     {
+        /// <summary>
+        /// Verifies whether the <paramref name="body"/> is a valid 
+        /// chunked body as per RFC-2616, section 3.6.1 Chunked Transfer Coding.
+        /// </summary>
+        /// <param name="body">
+        /// A list of bytes to verify for chunked coding validity.
+        /// </param>
+        /// <returns>
+        /// True if valid. Otherwise, false.
+        /// </returns>
         public static bool IsValidChunkedBody(IList<byte> body)
         {
             var sizeList = new List<byte>();
@@ -35,10 +45,11 @@ namespace Wynathan.Net.Http.Helpers
 
                 sizeList.Add(body[i]);
             }
-
+            
+            // TODO: reconsider; use no Select and consider default(KeyValuePair<int, int>).Equals(last)
             var last = chunks.Select(x => new { Key = x.Key, Value = x.Value })
-                .OrderBy(x => x.Key)
-                .LastOrDefault();
+                .OrderByDescending(x => x.Key)
+                .FirstOrDefault();
 
             if (last == null)
                 return false;
@@ -46,12 +57,32 @@ namespace Wynathan.Net.Http.Helpers
             return last.Value == 0;
         }
 
-        public static string GetHtml(Dictionary<string, string> headers, byte[] body, ref long bytes)
+        /// <summary>
+        /// Parses <paramref name="body"/> to an adjusted readable HTTP response 
+        /// body using <paramref name="headers"/> to make appropriate adjustments.
+        /// </summary>
+        /// <param name="headers">
+        /// HTTP headers to be used to identify adjustments required to parse the 
+        /// <paramref name="body"/>.
+        /// </param>
+        /// <param name="body">
+        /// The HTTP response body to parse.
+        /// </param>
+        /// <param name="bytes">
+        /// Changes this value to the one specified in Content-Length header if any.
+        /// </param>
+        /// <returns>
+        /// UTF-8 encoded readable string.
+        /// </returns>
+        public static string GetBody(Dictionary<string, string> headers, byte[] body, ref long bytes)
         {
+            // TODO: bytes var is not being set if Content-Length is not provided; verify if 
+            // such behaviour is valid.
+            // TODO: current implementation disregards content encoding, using UTF-8 by default.
             if (body.IsNullOrEmpty())
                 return null;
 
-            var contentLengthHeaderKey = headers.Keys.FirstOrDefault(x => x.StartsWithII("Content-Length"));
+            var contentLengthHeaderKey = headers.Keys.FirstOrDefault(x => x.EqualsII("Content-Length"));
             if (!string.IsNullOrWhiteSpace(contentLengthHeaderKey))
             {
                 var lengthVal = headers[contentLengthHeaderKey];
@@ -63,36 +94,35 @@ namespace Wynathan.Net.Http.Helpers
             var magic = body;
 
             // Transfer-Encoding: chunked
-            var transferEncodingHeaderKey = headers.Keys.FirstOrDefault(x => x.StartsWithII("Transfer-Encoding"));
+            var transferEncodingHeaderKey = headers.Keys.FirstOrDefault(x => x.EqualsII("Transfer-Encoding"));
             if (!string.IsNullOrWhiteSpace(transferEncodingHeaderKey))
             {
                 var transferEncoding = headers[transferEncodingHeaderKey];
                 if (transferEncoding.EqualsII("chunked"))
-                    magic = ReadChunkedHtmlData(body);
+                    magic = ReadChunkedBodyData(body);
             }
 
-            var encodingHeaderKey = headers.Keys.FirstOrDefault(x => x.StartsWithII("Content-Encoding"));
+            var encodingHeaderKey = headers.Keys.FirstOrDefault(x => x.EqualsII("Content-Encoding"));
             if (string.IsNullOrWhiteSpace(encodingHeaderKey))
                 return Encoding.UTF8.GetString(magic);
 
-            var encoding = headers[encodingHeaderKey];
+            var encoding = headers[encodingHeaderKey]?.ToLowerInvariant().Trim();
 
             using (var ms = new MemoryStream(magic))
             {
-                if (encoding.EqualsII("gzip"))
+                switch (encoding)
                 {
-                    using (var stream = new GZipStream(ms, CompressionMode.Decompress, false))
-                        return ReadFromStream(stream);
-                }
-                else if (encoding.EqualsII("deflate"))
-                {
-                    using (var stream = new DeflateStream(ms, CompressionMode.Decompress, false))
-                        return ReadFromStream(stream);
+                    case "gzip":
+                        using (var stream = new GZipStream(ms, CompressionMode.Decompress, false))
+                            return ReadFromStream(stream);
+                    case "deflate":
+                        using (var stream = new DeflateStream(ms, CompressionMode.Decompress, false))
+                            return ReadFromStream(stream);
+                    default:
+                        // TODO: reconsider
+                        throw new NotImplementedException($"Content-Encoding header is {encoding}.");
                 }
             }
-
-            // TODO: gotta do smth with it; not to live it like this, duh.
-            throw new NotImplementedException($"Content-Encoding header is {encoding}.");
         }
 
         /// <summary>
@@ -101,7 +131,7 @@ namespace Wynathan.Net.Http.Helpers
         /// <param name="body"></param>
         /// <returns></returns>
         /// <seealso cref="https://tools.ietf.org/html/rfc7230#section-3.3.1"/>
-        private static byte[] ReadChunkedHtmlData(byte[] body)
+        private static byte[] ReadChunkedBodyData(byte[] body)
         {
             var sizeList = new List<byte>();
             // Key-index/Value-size;

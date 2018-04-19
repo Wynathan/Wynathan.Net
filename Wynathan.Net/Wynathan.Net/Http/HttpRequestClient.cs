@@ -241,7 +241,7 @@ namespace Wynathan.Net.Http
                     break;
             }
 
-            foreach (var item in this.settings.GetAdditionalHeaders())
+            foreach (var item in this.settings.GetAdditionalHeaderLines())
                 headerBuilder.AppendLine(item);
 
             if (!this.settings.HasHeader("Accept"))
@@ -267,7 +267,8 @@ namespace Wynathan.Net.Http
             if (sendBody && body.Length > 0)
                 body.CopyTo(request, header.Length);
 
-            this.settings.RequestCopyWriter?.Invoke(request);
+            // Copy to a new array to avoid sending actual request.
+            this.settings.RequestCopyWriter?.Invoke(request.ToArray());
 
             this.request = request;
         }
@@ -287,7 +288,7 @@ namespace Wynathan.Net.Http
                     SslStream ssl;
                     if (this.clientCertificateCollection == null)
                     {
-                        ssl = new SslStream(this.networkStream, true, this.RemoteCertificateValidationCallback);
+                        ssl = new SslStream(this.networkStream, true, null);
                         ssl.AuthenticateAsClient(this.uri.Host);
                     }
                     else
@@ -311,6 +312,7 @@ namespace Wynathan.Net.Http
             this.statusCode = (HttpStatusCode)(-1);
             this.bytes = 0;
 
+            // TODO: allocate in ctor, clean up here
             this.headersResult = new List<byte>(256);
             this.bodyResult = new List<byte>(bufferSize);
             this.buffer = new byte[bufferSize];
@@ -357,7 +359,7 @@ namespace Wynathan.Net.Http
                 int indexAtFullHeader;
 
                 // Copy current header + current part to single array to detect header's end.
-                // TODO: perhaps it may make sense if we'll held all iterations in a separate 
+                // TODO: perhaps it may make sense if we'd hold all iterations in a separate 
                 // var (header won't take too much memory space; perhaps ~1kb). Still, 
                 // these copyings are not such a waste.
                 var temp = new byte[this.headersResult.Count + toAdd.Length];
@@ -401,7 +403,7 @@ namespace Wynathan.Net.Http
             }
 
             this.contentLengthCheck = !this.requireContentLengthCheck || this.contentLength == this.bodyResult.Count;
-            this.chunkedBodyCheck = !this.requireChunkedBodyCheck || HtmlBodyHelper.IsValidChunkedBody(this.bodyResult);
+            this.chunkedBodyCheck = !this.requireChunkedBodyCheck || HttpBodyHelper.IsValidChunkedBody(this.bodyResult);
 
             if (!this.networkStream.DataAvailable && this.headerDone && this.contentLengthCheck && this.chunkedBodyCheck)
                 this.continueReading = false;
@@ -409,7 +411,7 @@ namespace Wynathan.Net.Http
 
         private void FinishReadingData()
         {
-            // Cleanup SslStream - we will have to use another use either way.
+            // Cleanup SslStream - we will have to use another one either way.
             if (this.port == HttpPort.HTTPS)
                 this.socketStream.Dispose();
 
@@ -557,14 +559,8 @@ namespace Wynathan.Net.Http
             return result;
         }
 
-        private bool RemoteCertificateValidationCallback(object sender, X509Certificate certificate, 
-            X509Chain chain, SslPolicyErrors sslPolicyErrors)
-        {
-            return true;
-        }
-
         #region IDisposable Support
-        private volatile bool disposedValue = false; // To detect redundant calls
+        private volatile bool disposedValue = false;
 
         private void Dispose(bool disposing)
         {
@@ -582,18 +578,10 @@ namespace Wynathan.Net.Http
                 this.disposedValue = true;
             }
         }
-
-        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-        // ~HttpViaTcpHandler() {
-        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-        //   Dispose(false);
-        // }
-
-        // This code added to correctly implement the disposable pattern.
+        
         public void Dispose()
         {
             Dispose(true);
-            // GC.SuppressFinalize(this);
         }
         #endregion
     }
