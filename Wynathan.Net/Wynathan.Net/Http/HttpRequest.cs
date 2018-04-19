@@ -7,7 +7,6 @@ using System.Text;
 
 using Wynathan.Net.Extensions;
 using Wynathan.Net.Http.Helpers;
-using Wynathan.Net.Http.Models;
 
 namespace Wynathan.Net.Http
 {

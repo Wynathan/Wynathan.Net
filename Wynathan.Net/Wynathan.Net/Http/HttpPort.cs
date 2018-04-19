@@ -1,4 +1,4 @@
-﻿namespace Wynathan.Net.Http.Models
+﻿namespace Wynathan.Net.Http
 {
     internal enum HttpPort
     {

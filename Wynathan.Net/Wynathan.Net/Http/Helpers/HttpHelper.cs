@@ -1,7 +1,5 @@
 ﻿using System;
 
-using Wynathan.Net.Http.Models;
-
 namespace Wynathan.Net.Http.Helpers
 {
     internal static class HttpHelper
