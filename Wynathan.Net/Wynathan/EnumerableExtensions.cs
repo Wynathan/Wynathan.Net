@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Runtime.CompilerServices;
 
-namespace Wynathan.Net.Extensions
+namespace Wynathan
 {
     public static class EnumerableExtensions
     {
