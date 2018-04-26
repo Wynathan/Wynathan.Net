@@ -51,6 +51,16 @@
     <Compile Include="Http\HttpRequestMethod.cs" />
     <Compile Include="Http\HttpResponse.cs" />
     <Compile Include="Http\HttpPort.cs" />
+    <Compile Include="Mail\Exceptions\MailboxAuthenticationException.cs" />
+    <Compile Include="Mail\Exceptions\ServerUnavailableException.cs" />
+    <Compile Include="Mail\Exceptions\UnexpectedServerResponseException.cs" />
+    <Compile Include="Mail\Helpers\CommonMailHelper.cs" />
+    <Compile Include="Mail\MailClientBase.cs" />
+    <Compile Include="Mail\MailPort.cs" />
+    <Compile Include="Mail\Models\RequestResponseContainer.cs" />
+    <Compile Include="Mail\Models\SMTPRequestResponseContainer.cs" />
+    <Compile Include="Mail\Models\SMTPStatusCode.cs" />
+    <Compile Include="Mail\SMTPClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Serializers\JsonSerializer.cs" />
   </ItemGroup>
