@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -14,13 +15,17 @@ namespace Wynathan.Net.Http
     /// Represents an HTTP request model to be used in conjunction with 
     /// <see cref="HttpRequestClient"/> to operate HTTP interactions.
     /// </summary>
-    public sealed class HttpRequest
+    public sealed class HttpRequest : ICopyable<HttpRequest>
     {
+        private byte[] assembledRequest;
+        private string assembledRequestString;
+        private bool resetAssembledRequestString;
+
         private byte[] bodyBytes;
         private string body;
 
-        private readonly Dictionary<string, string> additionalHeaders;
-        
+        public HttpProtocolVersion HttpVersion;
+
         /// <summary>
         /// Specifies target <see cref="System.Uri"/>.
         /// </summary>
@@ -93,16 +98,19 @@ namespace Wynathan.Net.Http
         /// </summary>
         public bool AllowMethodChangeOnRedirect;
 
+        public RemoteCertificateValidationCallback ServerCertificateValidationCallback;
+
         /// <summary>
         /// Creates a new instance of <see cref="HttpRequest"/> type and 
         /// populates it with default values.
         /// </summary>
         public HttpRequest()
         {
+            this.HttpVersion = HttpProtocolVersion.Unspecified;
             this.AllowRedirectOnPost = false;
             this.AllowMethodChangeOnRedirect = false;
 
-            this.additionalHeaders = new Dictionary<string, string>();
+            this.Headers = new Dictionary<string, string>();
             this.SslProtocols = SslProtocols.Tls12 | SslProtocols.Ssl3;
             this.MaximumRedirectAmount = 30;
             this.SocketReadTimeout = 5000;
@@ -173,8 +181,17 @@ namespace Wynathan.Net.Http
             set
             {
                 this.body = value;
-                this.bodyBytes = Encoding.UTF8.GetBytes(value);
-                this.HttpMethod = HttpRequestMethod.Post;
+                if (value == null)
+                {
+                    this.bodyBytes = null;
+                }
+                else
+                {
+                    this.bodyBytes = Encoding.UTF8.GetBytes(value);
+                    // TODO: provide check for Put and Update
+                    if (this.HttpMethod != HttpRequestMethod.Post && this.HttpMethod != HttpRequestMethod.Delete)
+                        this.HttpMethod = HttpRequestMethod.Post;
+                }
             }
         }
 
@@ -194,10 +211,21 @@ namespace Wynathan.Net.Http
             set
             {
                 this.bodyBytes = value;
-                this.body = Encoding.UTF8.GetString(value);
-                this.HttpMethod = HttpRequestMethod.Post;
+                if (value == null)
+                {
+                    this.body = null;
+                }
+                else
+                {
+                    this.body = Encoding.UTF8.GetString(value);
+                    // TODO: provide check for Put and Update
+                    if (this.HttpMethod != HttpRequestMethod.Post && this.HttpMethod != HttpRequestMethod.Delete)
+                        this.HttpMethod = HttpRequestMethod.Post;
+                }
             }
         }
+
+        public Dictionary<string, string> Headers { get; }
 
         /// <summary>
         /// Adds a header to all consequent underlying requests. In case header 
@@ -223,31 +251,91 @@ namespace Wynathan.Net.Http
             if (this.GetHeader(ref trimmedKey, out existingValue))
                 value = string.Join(HttpHeadersHelper.RFC2616MultipleFieldValueHeaderSeparator, existingValue, value);
 
-            this.additionalHeaders[trimmedKey] = value.Trim();
+            this.Headers[trimmedKey] = value.Trim();
+        }
+
+        public string GetHttpRequest()
+        {
+            if (this.resetAssembledRequestString)
+            {
+                if (this.assembledRequest == null)
+                    this.assembledRequestString = null;
+                else
+                    this.assembledRequestString = Encoding.UTF8.GetString(this.assembledRequest);
+                this.resetAssembledRequestString = false;
+            }
+
+            return this.assembledRequestString;
+        }
+
+        internal void SetAssembledRequest(byte[] request)
+        {
+            this.resetAssembledRequestString = true;
+
+            if (request.IsNullOrEmpty())
+            {
+                this.assembledRequest = null;
+            }
+            else
+            {
+                this.assembledRequest = new byte[request.Length];
+                Array.Copy(request, this.assembledRequest, request.Length);
+            }
         }
 
         internal IEnumerable<string> GetAdditionalHeaderLines()
         {
-            return this.additionalHeaders.Select(x => string.Join(": ", x.Key, x.Value));
+            return this.Headers.Select(x => string.Join(": ", x.Key, x.Value));
         }
 
         internal bool HasHeader(string key)
         {
             var trimmedKey = key.Trim();
-            return this.additionalHeaders.Keys.Any(x => x.EqualsII(trimmedKey));
+            return this.Headers.Keys.Any(x => x.EqualsII(trimmedKey));
         }
 
         internal bool GetHeader(ref string key, out string value)
         {
             value = null;
             var trimmedKey = key.Trim();
-            var existingKey = this.additionalHeaders.Keys.FirstOrDefault(x => x.EqualsII(trimmedKey));
+            var existingKey = this.Headers.Keys.FirstOrDefault(x => x.EqualsII(trimmedKey));
             if (string.IsNullOrWhiteSpace(existingKey))
                 return false;
 
             key = existingKey;
-            value = this.additionalHeaders[existingKey];
+            value = this.Headers[existingKey];
             return true;
+        }
+
+        HttpRequest ICopyable<HttpRequest>.ShallowCopy()
+        {
+            return (this as ICopyable<HttpRequest>).DeepCopy();
+        }
+
+        HttpRequest ICopyable<HttpRequest>.DeepCopy()
+        {
+            var copy = new HttpRequest(this.Uri)
+            {
+                AllowMethodChangeOnRedirect = this.AllowMethodChangeOnRedirect,
+                AllowRedirectOnPost = this.AllowRedirectOnPost,
+                BodyBytes = this.BodyBytes,
+                ClientCertificate = this.ClientCertificate,
+                Domain = this.Domain,
+                HttpMethod = this.HttpMethod,
+                HttpVersion = this.HttpVersion,
+                MaximumRedirectAmount = this.MaximumRedirectAmount,
+                RequestCopyWriter = this.RequestCopyWriter,
+                ServerCertificateValidationCallback = this.ServerCertificateValidationCallback,
+                SocketReadTimeout = this.SocketReadTimeout,
+                SslProtocols = this.SslProtocols
+            };
+
+            foreach (var header in this.Headers)
+                copy.AddHeader(header.Key, header.Value);
+
+            copy.SetAssembledRequest(this.assembledRequest);
+
+            return copy;
         }
     }
 }

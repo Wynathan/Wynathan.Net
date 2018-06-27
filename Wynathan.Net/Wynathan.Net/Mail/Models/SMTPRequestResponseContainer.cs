@@ -4,7 +4,7 @@
     {
         internal SMTPRequestResponseContainer(RequestResponseContainer container)
         {
-            this.Request = container.Request;
+            this.RequestString = container.RequestString;
             this.RequestSendTime = container.RequestSendTime;
             this.Response = container.Response;
             this.ResponseReceiveTime = container.ResponseReceiveTime;

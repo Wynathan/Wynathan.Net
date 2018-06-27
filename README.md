@@ -17,3 +17,4 @@ TODO: provide a project setting (compilation constant) and a compilation configu
 	where stored instruction for compiling into a COM-component (should be at OneDrive somewhere), etc.
 TODO: avoid using any nuget packets where possible
 TODO: perhaps downgrade required .Net Framework version to 4.0
+TODO: provide email message parser

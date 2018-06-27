@@ -9,9 +9,15 @@ using Wynathan.Net.Extensions;
 
 namespace Wynathan.Net.Http.Helpers
 {
-    internal static class HttpHeadersHelper
+    public static class HttpHeadersHelper
     {
+        public const string HeaderAccept = "Accept";
+        public const string HeaderAcceptEncoding = "Accept-Encoding";
+        public const string HeaderConnection = "Connection";
+        public const string HeaderContentLength = "Content-Length";
         public const string HeaderSetCookie = "Set-Cookie";
+        public const string HeaderUpgradeInsecureRequests = "Upgrade-Insecure-Requests";
+        public const string HeaderUserAgent = "User-Agent";
 
         internal const string RFC2616MultipleFieldValueHeaderSeparator = ", ";
 
@@ -70,7 +76,12 @@ namespace Wynathan.Net.Http.Helpers
         {
             var headersParsed = ParseHeaders(headers, false);
             var requestedHeaderName = GetHeaderNameByType(header).Trim();
-            var key = headersParsed.Keys.FirstOrDefault(x => requestedHeaderName.EqualsII(x));
+            return TryRetrieveHeaderValue(headersParsed, requestedHeaderName, out value);
+        }
+
+        public static bool TryRetrieveHeaderValue(Dictionary<string, string> headers, string headerName, out string value)
+        {
+            var key = headers.Keys.FirstOrDefault(x => headerName.EqualsII(x));
             if (string.IsNullOrWhiteSpace(key))
             {
                 value = null;
@@ -78,7 +89,7 @@ namespace Wynathan.Net.Http.Helpers
             }
             else
             {
-                value = headersParsed[key];
+                value = headers[key];
                 return true;
             }
         }

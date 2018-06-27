@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 
 namespace Wynathan.Net.Http.Helpers
 {
@@ -51,6 +52,20 @@ namespace Wynathan.Net.Http.Helpers
         public static HttpPort GetPort(this Uri uri)
         {
             return (HttpPort)Enum.Parse(typeof(HttpPort), uri.Scheme, true);
+        }
+
+        internal static string ToProtocolVersionString(this HttpProtocolVersion version)
+        {
+            switch (version)
+            {
+                case HttpProtocolVersion.Unspecified:
+                case HttpProtocolVersion.Http11:
+                    return "1.1";
+                case HttpProtocolVersion.Http20:
+                    return "2.0";
+                default:
+                    throw new InvalidEnumArgumentException(nameof(version), (int)version, typeof(HttpProtocolVersion));
+            }
         }
     }
 }

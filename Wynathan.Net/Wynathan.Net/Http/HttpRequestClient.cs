@@ -18,11 +18,11 @@ namespace Wynathan.Net.Http
     public sealed class HttpRequestClient : IDisposable
     {
         private const int bufferSize = 4096;
+        
+        private const string DefaultHeaderAcceptEncoding = "Accept-Encoding: ";
+        private const string DefaultHeaderUserAgent = "User-Agent: ";
+        private const string DefaultHeaderUpgradeInsecureRequests = "Upgrade-Insecure-Requests: ";
 
-        private const string DefaultHeaderConnection = "Connection: keep-alive";
-        private const string DefaultHeaderAccept = "Accept: */*";
-        private const string DefaultHeaderAcceptEncoding = "Accept-Encoding: gzip, deflate";
-        private const string DefaultHeaderUserAgent = "User-Agent: Wynathan's HttpRequestClient <glyebov.vo@gmail.com>";
         private HttpRequest settings;
         private X509Certificate2Collection clientCertificateCollection;
 
@@ -61,12 +61,21 @@ namespace Wynathan.Net.Http
         private HttpResponse response;
 
         private X509Certificate serverCertificate;
-        private readonly List<HttpResponse> requestChainHistory;
 
-        public HttpRequestClient()
+        public bool UpgradeInsecureRequests;
+        public HttpProtocolVersion HttpVersion;
+        public RemoteCertificateValidationCallback ServerCertificateValidationCallback;
+
+        public HttpRequestClient(
+            bool upgradeInsecureRequests = true, 
+            HttpProtocolVersion httpVersion = HttpProtocolVersion.Http11,
+            RemoteCertificateValidationCallback serverCertificateValidationCallback = null)
         {
+            this.UpgradeInsecureRequests = upgradeInsecureRequests;
+            this.HttpVersion = httpVersion;
+            this.ServerCertificateValidationCallback = serverCertificateValidationCallback;
+
             this.loadTimeStopwatch = new Stopwatch();
-            this.requestChainHistory = new List<HttpResponse>();
         }
 
         #region Sync API
@@ -97,7 +106,7 @@ namespace Wynathan.Net.Http
             } while (this.shouldContinue);
 
             this.CleanupSession();
-            return this.CreateResultFromHistory();
+            return this.response;
         }
 
         private void Connect()
@@ -159,7 +168,7 @@ namespace Wynathan.Net.Http
             } while (this.shouldContinue);
 
             this.CleanupSession();
-            return this.CreateResultFromHistory();
+            return this.response;
         }
 
         private async Task ConnectAsync()
@@ -215,15 +224,18 @@ namespace Wynathan.Net.Http
                 this.changeMethodToGet = false;
             }
 
-            this.response = new HttpResponse
+            this.response = new HttpResponse(this.response)
             {
                 RequestedUri = this.uri,
                 HttpMethod = this.settings.HttpMethod,
             };
 
+            if (this.settings.HttpVersion == HttpProtocolVersion.Unspecified)
+                this.settings.HttpVersion = this.HttpVersion;
+
             var headerBuilder = new StringBuilder();
 
-            headerBuilder.AppendLine($"{this.settings.HttpMethod.ToString().ToUpperInvariant()} {this.uri.PathAndQuery} HTTP/1.1");
+            headerBuilder.AppendLine($"{this.settings.HttpMethod.ToString().ToUpperInvariant()} {this.uri.PathAndQuery} HTTP/{this.settings.HttpVersion.ToProtocolVersionString()}");
             headerBuilder.AppendLine($"Host: {this.uri.Host}");
 
             bool sendBody = true;
@@ -232,25 +244,30 @@ namespace Wynathan.Net.Http
                 case HttpRequestMethod.Get:
                 case HttpRequestMethod.Head:
                     sendBody = false;
-                    if (!this.settings.HasHeader("Connection"))
-                        headerBuilder.AppendLine(DefaultHeaderConnection);
+                    if (!this.settings.HasHeader(HttpHeadersHelper.HeaderConnection))
+                        this.settings.AddHeader(HttpHeadersHelper.HeaderConnection, "keep-alive");
                     break;
                 case HttpRequestMethod.Post:
-                    headerBuilder.AppendLine($"Content-Length: {this.settings.BodyBytes?.Length ?? 0}");
+                    if (!this.settings.HasHeader(HttpHeadersHelper.HeaderContentLength))
+                        this.settings.AddHeader(HttpHeadersHelper.HeaderContentLength, (this.settings.BodyBytes?.Length ?? 0).ToString());
                     break;
+                // TODO: consider Put, Update, Delete
             }
+
+            if (!this.settings.HasHeader(HttpHeadersHelper.HeaderAccept))
+                this.settings.AddHeader(HttpHeadersHelper.HeaderAccept, "*/*");
+
+            if (!this.settings.HasHeader(HttpHeadersHelper.HeaderAcceptEncoding))
+                this.settings.AddHeader(HttpHeadersHelper.HeaderAcceptEncoding, "gzip, deflate");
+
+            if (!this.settings.HasHeader(HttpHeadersHelper.HeaderUserAgent))
+                this.settings.AddHeader(HttpHeadersHelper.HeaderUserAgent, "Wynathan's HttpRequestClient");
+
+            if (this.UpgradeInsecureRequests && !this.settings.HasHeader(HttpHeadersHelper.HeaderUpgradeInsecureRequests))
+                this.settings.AddHeader(HttpHeadersHelper.HeaderUpgradeInsecureRequests, "1");
 
             foreach (var item in this.settings.GetAdditionalHeaderLines())
                 headerBuilder.AppendLine(item);
-
-            if (!this.settings.HasHeader("Accept"))
-                headerBuilder.AppendLine(DefaultHeaderAccept);
-
-            if (!this.settings.HasHeader("Accept-Encoding"))
-                headerBuilder.AppendLine(DefaultHeaderAcceptEncoding);
-
-            if (!this.settings.HasHeader("User-Agent"))
-                headerBuilder.AppendLine(DefaultHeaderUserAgent);
 
             headerBuilder.AppendLine();
 
@@ -284,17 +301,16 @@ namespace Wynathan.Net.Http
                     // Provide authentication using client-side certificate if one 
                     // is provided. If validating that certificate will fail at the 
                     // server side - let the exception propagate.
-                    SslStream ssl;
+                    var validationCallback = this.settings.ServerCertificateValidationCallback ?? this.ServerCertificateValidationCallback;
+                    var ssl = new SslStream(this.networkStream, true, validationCallback);
                     if (this.clientCertificateCollection == null)
-                    {
-                        ssl = new SslStream(this.networkStream, true, null);
                         ssl.AuthenticateAsClient(this.uri.Host);
-                    }
                     else
-                    {
-                        ssl = new SslStream(this.networkStream, true);
                         ssl.AuthenticateAsClient(this.uri.Host, this.clientCertificateCollection, this.settings.SslProtocols, true);
-                    }
+
+                    // ssl.IsEncrypted
+                    // ssl.IsSigned
+                    // ssl.IsMutuallyAuthenticated
 
                     this.serverCertificate = ssl.RemoteCertificate;
                     this.socketStream = ssl;
@@ -537,8 +553,8 @@ namespace Wynathan.Net.Http
             this.response.ServerCertificate = this.serverCertificate;
             this.response.Elapsed = this.loadTimeStopwatch.Elapsed;
             this.response.SetBody(this.headersPlain, this.body, this.bytes);
-
-            this.requestChainHistory.Add(this.response);
+            this.response.Request = (this.settings as ICopyable<HttpRequest>).DeepCopy();
+            this.response.Request.SetAssembledRequest(this.request);
         }
 
         private void CleanupSession()
@@ -550,15 +566,6 @@ namespace Wynathan.Net.Http
             this.socketStream = null;
             this.networkStream = null;
             this.tcpClient = null;
-        }
-
-        private HttpResponse CreateResultFromHistory()
-        {
-            int amount = this.requestChainHistory.Count;
-            var result = this.requestChainHistory[amount - 1];
-            for (int i = 0; i < amount - 1; i++)
-                result.AddRequestToChain(this.requestChainHistory[i]);
-            return result;
         }
 
         #region IDisposable Support

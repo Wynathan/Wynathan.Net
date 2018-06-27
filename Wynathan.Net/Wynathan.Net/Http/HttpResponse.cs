@@ -19,12 +19,18 @@ namespace Wynathan.Net.Http
     {
         private string[] plainHttpHeaders;
         private byte[] plainResponseBody;
-        private readonly List<HttpResponse> requestChain;
-        
-        internal HttpResponse()
+        private HttpRequest request;
+
+        internal HttpResponse(HttpResponse previous)
         {
-            this.requestChain = new List<HttpResponse>();
+            if (previous != null)
+            {
+                this.Previous = previous;
+                this.Previous.Following = this;
+            }
         }
+
+        public HttpRequest Request { get; internal set; }
 
         /// <summary>
         /// The target <see cref="Uri"/> to which original request 
@@ -78,6 +84,10 @@ namespace Wynathan.Net.Http
         /// </summary>
         public string Body { get; private set; }
 
+        public HttpResponse Previous { get; }
+
+        public HttpResponse Following { get; private set; }
+
         /// <summary>
         /// Returns reassembled HTTP response with headers and body. 
         /// Disregards Transfer-Encoding if any (header will persist, 
@@ -92,30 +102,7 @@ namespace Wynathan.Net.Http
             var mergedHtml = string.Join("\r\n\r\n", mergedHeaders, this.Body);
             return mergedHtml;
         }
-
-        /// <summary>
-        /// Returns a copy of requests made to achieve final response.
-        /// </summary>
-        /// <returns></returns>
-        /// <remarks>
-        /// TODO: reconsider in terms of request-response chain wrapper.
-        /// </remarks>
-        public IEnumerable<HttpResponse> GetRequestChain()
-        {
-            return this.requestChain.ToArray();
-        }
-
-        internal void SetRequestChain(IEnumerable<HttpResponse> requestChain)
-        {
-            foreach (var request in requestChain)
-                this.requestChain.Add(request);
-        }
-
-        internal void AddRequestToChain(HttpResponse request)
-        {
-            this.requestChain.Add(request);
-        }
-
+        
         internal void SetBody(string[] plainHttpHeaders, byte[] plainResponseBody, long bytes)
         {
             this.plainHttpHeaders = plainHttpHeaders;

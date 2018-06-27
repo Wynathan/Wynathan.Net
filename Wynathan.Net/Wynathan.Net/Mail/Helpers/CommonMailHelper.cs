@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Wynathan.Net.Mail.Helpers
 {
@@ -14,8 +10,13 @@ namespace Wynathan.Net.Mail.Helpers
 
         public static bool EndsWithANewLine(byte[] message)
         {
-            return message[message.Length - 2] == CommonMailHelper.ByteCarriageReturn
-                && message[message.Length - 1] == CommonMailHelper.ByteNewLine;
+            return EndsWithANewLine(message, message.Length);
+        }
+
+        public static bool EndsWithANewLine(byte[] message, int length)
+        {
+            return message[length - 2] == CommonMailHelper.ByteCarriageReturn
+                && message[length - 1] == CommonMailHelper.ByteNewLine;
         }
 
         public static bool ResizeAndComplementWithANewLineIfNecessary(ref byte[] message)

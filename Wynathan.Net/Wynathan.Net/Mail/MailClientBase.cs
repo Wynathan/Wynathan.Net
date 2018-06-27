@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 
+using Wynathan.Net.Mail.Exceptions;
 using Wynathan.Net.Mail.Helpers;
 using Wynathan.Net.Mail.Models;
 
@@ -36,7 +37,7 @@ namespace Wynathan.Net.Mail
         private readonly byte[] buffer;
         private byte[] currentRead;
         private int currentReadOffset;
-        private int read;
+        private int bytesRead;
 
         private bool isAuthenticated;
         private string email;
@@ -70,19 +71,25 @@ namespace Wynathan.Net.Mail
                 if (!this.TryEstablishSession())
                 {
                     this.TryShutdownSession();
-                    if (this.delayAuth)
+                    if (!this.delayAuth)
                         this.TryEstablishSession();
                 }
 
                 if (!this.delayAuth)
-                    this.SendAuthenticationRequest(this.email, this.password);
+                    this.SendAuthenticationRequestWrapper(this.email, this.password);
             }
 
             return this.isAuthenticated;
         }
 
+        public string Send(string message)
+        {
+            return this.SendReceive(message)?.Response;
+        }
+
         protected bool TryEstablishSession()
         {
+            // TODO: attempt peek or smth to verify if socket is still alive
             if (this.tcpClient == null)
             {
                 this.tcpClient = new TcpClient();
@@ -92,8 +99,11 @@ namespace Wynathan.Net.Mail
                 this.networkStream = this.tcpClient.GetStream();
                 this.networkStream.ReadTimeout = socketReadTimeout;
 
-                this.Send(null);
-                return true;
+                var initialResponse = this.SendReceive((byte[])null, false);
+                if (this.ValidateSessionEstablishmentResponse(initialResponse))
+                    return true;
+                else
+                    throw new UnexpectedServerResponseException(initialResponse?.Response?.Trim());
             }
 
             return false;
@@ -104,7 +114,7 @@ namespace Wynathan.Net.Mail
             try
             {
                 var shutdownMessage = this.CreateSessionShutdownMessage();
-                this.Send(shutdownMessage);
+                this.SendReceive(shutdownMessage, false);
                 this.CleanupSession();
                 return true;
             }
@@ -125,16 +135,38 @@ namespace Wynathan.Net.Mail
             this.tcpClient = null;
         }
 
-        protected THistoryEntry Send(string message)
+        protected THistoryEntry SendReceive(string message, bool checkAuth = true)
         {
-            var historyEntry = new RequestResponseContainer();
-            if (!string.IsNullOrEmpty(message))
+            if (string.IsNullOrEmpty(message))
+                return this.SendReceive((byte[])null, checkAuth);
+
+            // TODO: reconsider double conversion
+            var messageBytes = RequestResponseContainer.ConvertionEncoding.GetBytes(message);
+            return this.SendReceive(messageBytes, checkAuth);
+        }
+
+        protected THistoryEntry SendReceive(byte[] message, bool checkAuth = true)
+        {
+            this.TryEstablishSession();
+
+            if (checkAuth && !this.isAuthenticated)
             {
-                var messageBytes = Encoding.UTF8.GetBytes(message);
-                CommonMailHelper.ResizeAndComplementWithANewLineIfNecessary(ref messageBytes);
+                if (this.delayAuth)
+                    this.SendAuthenticationRequestWrapper(this.email, this.password);
+                else
+                {
+                    this.TryShutdownSession();
+                    throw new AuthenticationRequiredException();
+                }
+            }
+            
+            var historyEntry = new RequestResponseContainer();
+            if (!message.IsNullOrEmpty())
+            {
+                CommonMailHelper.ResizeAndComplementWithANewLineIfNecessary(ref message);
 
                 this.loadTimeStopwatch.Restart();
-                this.networkStream.Write(messageBytes, 0, messageBytes.Length);
+                this.networkStream.Write(message, 0, message.Length);
                 this.networkStream.Flush();
                 this.loadTimeStopwatch.Stop();
 
@@ -152,26 +184,47 @@ namespace Wynathan.Net.Mail
             var modifiedEntry = this.AddHistoryEntry(historyEntry);
             return modifiedEntry;
         }
-
+        
         protected byte[] Read()
+        {
+            return this.Read(true);
+        }
+
+        private byte[] Read(bool firstCall)
         {
             this.ResetReadDependencies();
 
             while (true)
             {
-                read = this.networkStream.Read(this.buffer, 0, bufferSize);
-                if (read > 0)
+                try
                 {
-                    if (currentReadOffset + read > this.currentRead.Length)
+                    bytesRead = this.networkStream.Read(this.buffer, 0, bufferSize);
+                }
+                catch (IOException)
+                {
+                    // TODO: reconsider
+                    if (firstCall)
+                    {
+                        this.TryEstablishSession();
+                        this.SendAuthenticationRequestWrapper(this.email, this.password);
+                        return this.Read(false);
+                    }
+                    else
+                        throw;
+                }
+
+                if (bytesRead > 0)
+                {
+                    if (currentReadOffset + bytesRead > this.currentRead.Length)
                         Array.Resize(ref this.currentRead, this.currentRead.Length + bufferSize);
 
-                    Array.Copy(this.buffer, 0, this.currentRead, this.currentReadOffset, read);
-                    this.currentReadOffset += read;
+                    Array.Copy(this.buffer, 0, this.currentRead, this.currentReadOffset, bytesRead);
+                    this.currentReadOffset += bytesRead;
                 }
 
                 if (!this.networkStream.DataAvailable
-                    && this.read != 0 // TODO: reconsider
-                    && CommonMailHelper.EndsWithANewLine(buffer)
+                    && this.bytesRead != 0 // TODO: reconsider
+                    && CommonMailHelper.EndsWithANewLine(this.currentRead, this.currentReadOffset)
                     && this.ReadCompletionVerification())
                     break;
             }
@@ -187,7 +240,7 @@ namespace Wynathan.Net.Mail
             Array.Clear(this.buffer, 0, bufferSize);
             Array.Resize(ref this.currentRead, bufferSize);
             this.currentReadOffset = 0;
-            this.read = 0;
+            this.bytesRead = 0;
         }
 
         protected bool AreCredentialsNew(string email, string password)
@@ -219,7 +272,18 @@ namespace Wynathan.Net.Mail
         {
             return true;
         }
-        
+
+        protected virtual bool ValidateSessionEstablishmentResponse(THistoryEntry historyEntry)
+        {
+            return historyEntry != null;
+        }
+
+        private void SendAuthenticationRequestWrapper(string email, string password)
+        {
+            this.SendAuthenticationRequest(email, password);
+            this.isAuthenticated = true;
+        }
+
         protected abstract void SendAuthenticationRequest(string email, string password);
 
         protected abstract string CreateSessionShutdownMessage();

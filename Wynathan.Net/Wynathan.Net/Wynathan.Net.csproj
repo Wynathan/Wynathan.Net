@@ -51,7 +51,10 @@
     <Compile Include="Http\HttpRequestMethod.cs" />
     <Compile Include="Http\HttpResponse.cs" />
     <Compile Include="Http\HttpPort.cs" />
+    <Compile Include="Http\HttpProtocolVersion.cs" />
+    <Compile Include="Mail\Exceptions\AuthenticationRequiredException.cs" />
     <Compile Include="Mail\Exceptions\MailboxAuthenticationException.cs" />
+    <Compile Include="Mail\Exceptions\RejectedMailboxException.cs" />
     <Compile Include="Mail\Exceptions\ServerUnavailableException.cs" />
     <Compile Include="Mail\Exceptions\UnexpectedServerResponseException.cs" />
     <Compile Include="Mail\Helpers\CommonMailHelper.cs" />
