@@ -65,7 +65,8 @@
     <Compile Include="Mail\Models\SMTPStatusCode.cs" />
     <Compile Include="Mail\SMTPClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Serializers\JsonSerializer.cs" />
+    <Compile Include="Serialisers\JsonSerialiser.cs" />
+    <Compile Include="Serialisers\XmlSerialiser.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Wynathan\Wynathan.csproj">

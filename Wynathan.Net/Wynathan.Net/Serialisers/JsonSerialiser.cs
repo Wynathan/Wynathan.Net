@@ -2,20 +2,20 @@
 using System.Runtime.Serialization.Json;
 using System.Text;
 
-namespace Wynathan.Net.Serializers
+namespace Wynathan.Net.Serialisers
 {
-    public class JsonSerializer
+    public class JsonSerialiser
     {
-        public static string Serialize<T>(T instance)
+        public static string Serialise<T>(T instance)
             where T : class, new()
         {
-            return Serialize(instance, Encoding.UTF8);
+            return Serialise(instance, Encoding.UTF8);
         }
 
         /// <summary>
-        /// Serializes an object to JSON
+        /// Serialises an object to JSON
         /// </summary>
-        public static string Serialize<T>(T instance, Encoding encoding)
+        public static string Serialise<T>(T instance, Encoding encoding)
             where T : class, new()
         {
             var serializer = new DataContractJsonSerializer(typeof(T));
@@ -26,16 +26,16 @@ namespace Wynathan.Net.Serializers
             }
         }
 
-        public static T Deserialize<T>(string json)
+        public static T Deserialise<T>(string json)
             where T : class, new()
         {
-            return Deserialize<T>(json, Encoding.UTF8);
+            return Deserialise<T>(json, Encoding.UTF8);
         }
 
         /// <summary>
-        /// Deserializes an object from JSON
+        /// Deserialises an object from JSON
         /// </summary>
-        public static T Deserialize<T>(string json, Encoding encoding)
+        public static T Deserialise<T>(string json, Encoding encoding)
             where T : class, new()
         {
             using (var stream = new MemoryStream(encoding.GetBytes(json)))
