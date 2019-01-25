@@ -74,7 +74,7 @@ namespace Wynathan.Net.Http.Helpers
         /// <returns>
         /// UTF-8 encoded readable string.
         /// </returns>
-        public static string GetBody(Dictionary<string, string> headers, byte[] body, ref long bytes)
+        public static string GetBody(Dictionary<string, string> headers, byte[] body, ref long bytes, ref byte[] resultBytes)
         {
             // TODO: bytes var is not being set if Content-Length is not provided; verify if 
             // such behaviour is valid.
@@ -102,6 +102,8 @@ namespace Wynathan.Net.Http.Helpers
                     magic = ReadChunkedBodyData(body);
             }
 
+            resultBytes = magic;
+
             var encodingHeaderKey = headers.Keys.FirstOrDefault(x => x.EqualsII("Content-Encoding"));
             if (string.IsNullOrWhiteSpace(encodingHeaderKey))
                 return Encoding.UTF8.GetString(magic);
@@ -114,10 +116,10 @@ namespace Wynathan.Net.Http.Helpers
                 {
                     case "gzip":
                         using (var stream = new GZipStream(ms, CompressionMode.Decompress, false))
-                            return ReadFromStream(stream);
+                            return ReadFromStream(stream, ref resultBytes);
                     case "deflate":
                         using (var stream = new DeflateStream(ms, CompressionMode.Decompress, false))
-                            return ReadFromStream(stream);
+                            return ReadFromStream(stream, ref resultBytes);
                     default:
                         // TODO: reconsider
                         throw new NotImplementedException($"Content-Encoding header is {encoding}.");
@@ -162,12 +164,13 @@ namespace Wynathan.Net.Http.Helpers
             return result.ToArray();
         }
 
-        private static string ReadFromStream(Stream stream)
+        private static string ReadFromStream(Stream stream, ref byte[] resultBytes)
         {
             using (var ms = new MemoryStream())
             {
                 stream.CopyTo(ms);
-                return Encoding.UTF8.GetString(ms.ToArray());
+                resultBytes = ms.ToArray();
+                return Encoding.UTF8.GetString(resultBytes);
             }
         }
     }

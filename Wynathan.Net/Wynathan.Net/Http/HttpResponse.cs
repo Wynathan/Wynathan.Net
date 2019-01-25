@@ -84,6 +84,8 @@ namespace Wynathan.Net.Http
         /// </summary>
         public string Body { get; private set; }
 
+        public byte[] BodyBytes { get; private set; }
+
         public HttpResponse Previous { get; }
 
         public HttpResponse Following { get; private set; }
@@ -108,8 +110,10 @@ namespace Wynathan.Net.Http
             this.plainHttpHeaders = plainHttpHeaders;
             this.plainResponseBody = plainResponseBody;
             this.Headers = HttpHeadersHelper.ParseHeaders(plainHttpHeaders);
-            this.Body = HttpBodyHelper.GetBody(this.Headers, plainResponseBody, ref bytes);
+            byte[] body = null;
+            this.Body = HttpBodyHelper.GetBody(this.Headers, plainResponseBody, ref bytes, ref body);
             this.Bytes = bytes;
+            this.BodyBytes = body;
         }
     }
 }

@@ -297,6 +297,10 @@ namespace Wynathan.Net.Http
                     this.socketStream = this.networkStream;
                     break;
                 case HttpPort.HTTPS:
+                    // We ought to have cleared it in case of port/host change.
+                    if (this.socketStream != null && this.socketStream.GetType() == typeof(SslStream))
+                        break;
+
                     // Do not ignore server-side certificate validation.
                     // Provide authentication using client-side certificate if one 
                     // is provided. If validating that certificate will fail at the 
@@ -311,7 +315,6 @@ namespace Wynathan.Net.Http
                     // ssl.IsEncrypted
                     // ssl.IsSigned
                     // ssl.IsMutuallyAuthenticated
-
                     this.serverCertificate = ssl.RemoteCertificate;
                     this.socketStream = ssl;
                     break;
@@ -427,8 +430,8 @@ namespace Wynathan.Net.Http
         private void FinishReadingData()
         {
             // Cleanup SslStream - we will have to use another one either way.
-            if (this.port == HttpPort.HTTPS)
-                this.socketStream.Dispose();
+            //if (this.port == HttpPort.HTTPS)
+            //    this.socketStream.Dispose();
 
             if (this.bytes == 0)
                 this.bytes = this.bodyResult.Count;
